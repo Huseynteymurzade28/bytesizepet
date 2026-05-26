@@ -11,9 +11,15 @@ import (
 
 func (m model) View() string {
 	if m.quitting {
+		var msg string
+		if m.pet.name != "" {
+			msg = "Goodbye! " + m.pet.name + " will miss you~ 🐾"
+		} else {
+			msg = "Goodbye! Come back soon~ 🐾"
+		}
 		farewell := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("213")).
-			Render("\n  Hoşça kal! " + m.pet.name + " seni özleyecek~ 🐾\n\n")
+			Render("\n  " + msg + "\n\n")
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, farewell)
 	}
 
@@ -33,13 +39,17 @@ func (m model) View() string {
 // ── Character select ──────────────────────────────────────────────────────────
 
 func viewCharSelect(m model) string {
-	title := titleStyle.Render("✨  Karakterini Seç  ✨")
-	sub := helpStyle.Render("  ← / → ile seç,  Enter ile onayla")
+	title := titleStyle.Render("✨  Choose Your Pet  ✨")
+	sub := helpStyle.Render("  ← / → / ↑ / ↓  to select,  Enter to confirm")
 
 	boxes := make([]string, len(AllChars))
 	for i, ch := range AllChars {
 		art := lipgloss.NewStyle().Foreground(ch.Colors.Normal).Render(ch.Art.Normal)
-		label := lipgloss.NewStyle().Bold(i == m.selectedChar).Render(ch.Name + "\n" + ch.Emoji + " " + ch.Species)
+		nameStr := ch.Name
+		if i == m.selectedChar {
+			nameStr = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("213")).Render(nameStr)
+		}
+		label := nameStr + "\n" + ch.Emoji + " " + ch.Species
 		inner := art + "\n\n" + label
 
 		if i == m.selectedChar {
@@ -49,9 +59,17 @@ func viewCharSelect(m model) string {
 		}
 	}
 
-	row := lipgloss.JoinHorizontal(lipgloss.Top, boxes...)
+	// Layout in rows of charSelectCols
+	var rows []string
+	for i := 0; i < len(boxes); i += charSelectCols {
+		end := i + charSelectCols
+		if end > len(boxes) {
+			end = len(boxes)
+		}
+		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, boxes[i:end]...))
+	}
 
-	content := strings.Join([]string{title, sub, "", row}, "\n")
+	content := strings.Join(append([]string{title, sub, ""}, rows...), "\n")
 	return borderStyle.Render(content)
 }
 
@@ -60,21 +78,22 @@ func viewCharSelect(m model) string {
 func viewMain(m model) string {
 	p := m.pet
 
-	title := titleStyle.Render(fmt.Sprintf("✨  %s  ✨", p.name))
+	title := titleStyle.Render(fmt.Sprintf("✨  %s  %s  ✨", p.name, AllChars[p.charIdx].Emoji))
 	art := renderPetArt(p)
 
 	indicator := renderStatusIndicator(p)
-	infoRow := fmt.Sprintf("Durum: %s    Yaş: %d tık", indicator, p.age)
+	infoRow := fmt.Sprintf("Status: %s    Age: %d ticks", indicator, p.age)
 
 	stats := strings.Join([]string{
-		renderStat("Açlık  :", p.hunger, hungerColor(p.hunger)),
-		renderStat("Mutluluk:", p.happiness, happinessColor(p.happiness)),
-		renderStat("Enerji  :", p.energy, energyColor(p.energy)),
+		renderStat("Hunger   :", p.hunger, hungerColor(p.hunger)),
+		renderStat("Happiness:", p.happiness, happinessColor(p.happiness)),
+		renderStat("Energy   :", p.energy, energyColor(p.energy)),
 	}, "\n")
 
 	status := statusStyle.Render("» " + p.statusMsg)
 	divider := dividerStyle.Render(strings.Repeat("─", 40))
-	help := helpStyle.Render("[f] Besle  [p] Oyna  [s] Uyu  [1] Tahmin  [2] Tepki  [q] Çık")
+	help1 := helpStyle.Render("[f] Feed  [p] Play  [s] Sleep  [q] Quit")
+	help2 := helpStyle.Render("[1] Guess  [2] React  [3] RPS  [4] Math")
 
 	content := strings.Join([]string{
 		title, "",
@@ -83,7 +102,8 @@ func viewMain(m model) string {
 		stats, "",
 		status,
 		divider,
-		help,
+		help1,
+		help2,
 	}, "\n")
 
 	return borderStyle.Render(content)
@@ -92,18 +112,22 @@ func viewMain(m model) string {
 // ── Minigame screen ───────────────────────────────────────────────────────────
 
 func viewMinigame(m model) string {
-	title := titleStyle.Render(fmt.Sprintf("✨  %s  ✨", m.pet.name))
+	title := titleStyle.Render(fmt.Sprintf("✨  %s  %s  ✨", m.pet.name, AllChars[m.pet.charIdx].Emoji))
 	art := renderPetArt(m.pet)
 
 	var gameSection string
 	switch {
 	case m.mg.phase == mgGuessPlaying || m.mg.phase == mgGuessDone:
 		gameSection = viewGuessGame(m)
+	case m.mg.phase == mgRPSPlaying || m.mg.phase == mgRPSDone:
+		gameSection = viewRPSGame(m)
+	case m.mg.phase == mgMathPlaying || m.mg.phase == mgMathDone:
+		gameSection = viewMathGame(m)
 	default:
 		gameSection = viewReactionGame(m)
 	}
 
-	help := helpStyle.Render("[ESC] Ana ekrana dön")
+	help := helpStyle.Render("[ESC] Back to main")
 
 	content := strings.Join([]string{
 		title, "",
@@ -116,39 +140,80 @@ func viewMinigame(m model) string {
 }
 
 func viewGuessGame(m model) string {
-	header := mgTitleStyle.Render("🎮  TAHMİN OYUNU")
+	header := mgTitleStyle.Render("🎮  NUMBER GUESS")
 
 	if m.mg.phase == mgGuessDone {
 		return strings.Join([]string{
 			header, "",
 			resultStyle.Render(m.mg.resultMsg), "",
-			helpStyle.Render("[ENTER] Devam"),
+			helpStyle.Render("[ENTER] Continue"),
 		}, "\n")
 	}
 
 	hint := statusStyle.Render(m.mg.hint)
-	keys := helpStyle.Render("[1-9] Tahmin et")
+	keys := helpStyle.Render("[1-9] Make a guess")
 
 	return strings.Join([]string{header, "", hint, keys}, "\n")
 }
 
 func viewReactionGame(m model) string {
-	header := mgTitleStyle.Render("⚡  TEPKİ OYUNU")
+	header := mgTitleStyle.Render("⚡  REACTION TIME")
 
 	var body string
 	switch m.mg.phase {
 	case mgReactionWait:
-		body = reactionWaitStyle.Render("Hazırlan... sinyal bekleniyor...") +
-			"\n\n" + helpStyle.Render("[SPACE] beklet — erken basma!")
+		body = reactionWaitStyle.Render("Get ready... waiting for the signal...") +
+			"\n\n" + helpStyle.Render("[SPACE] wait — don't press early!")
 	case mgReactionReady:
-		body = reactionReadyStyle.Render("  ★  ŞİMDİ!  ★  ") +
-			"\n\n" + helpStyle.Render("[SPACE] HEMEN BAS!")
+		body = reactionReadyStyle.Render("  ★  NOW!  ★  ") +
+			"\n\n" + helpStyle.Render("[SPACE] PRESS IT!")
 	case mgReactionDone:
 		body = resultStyle.Render(m.mg.resultMsg) +
-			"\n\n" + helpStyle.Render("[ENTER] Devam")
+			"\n\n" + helpStyle.Render("[ENTER] Continue")
 	}
 
 	return strings.Join([]string{header, "", body}, "\n")
+}
+
+func viewRPSGame(m model) string {
+	header := mgRPSTitleStyle.Render("🪨  ROCK  PAPER  SCISSORS  ✂️")
+
+	if m.mg.phase == mgRPSDone {
+		lines := strings.SplitN(m.mg.resultMsg, "\n\n", 2)
+		var body string
+		if len(lines) == 2 {
+			body = statusStyle.Render(lines[0]) + "\n\n" + resultStyle.Render(lines[1])
+		} else {
+			body = resultStyle.Render(m.mg.resultMsg)
+		}
+		return strings.Join([]string{header, "", body, "", helpStyle.Render("[ENTER] Continue")}, "\n")
+	}
+
+	prompt := statusStyle.Render("Choose your move!")
+	choices := helpStyle.Render("[R] Rock 🪨   [P] Paper 📄   [S] Scissors ✂️")
+
+	return strings.Join([]string{header, "", prompt, choices}, "\n")
+}
+
+func viewMathGame(m model) string {
+	header := mgMathTitleStyle.Render("🧮  MATH QUIZ")
+
+	if m.mg.phase == mgMathDone {
+		return strings.Join([]string{
+			header, "",
+			resultStyle.Render(m.mg.resultMsg), "",
+			helpStyle.Render("[ENTER] Continue"),
+		}, "\n")
+	}
+
+	question := mathQuestionStyle.Render("  " + m.mg.mathExpr + "  ")
+	opts := helpStyle.Render(fmt.Sprintf("[1] %-5d  [2] %-5d  [3] %d",
+		m.mg.mathOptions[0],
+		m.mg.mathOptions[1],
+		m.mg.mathOptions[2],
+	))
+
+	return strings.Join([]string{header, "", question, "", opts}, "\n")
 }
 
 // ── Pet art ───────────────────────────────────────────────────────────────────
@@ -176,7 +241,6 @@ func renderPetArt(p petModel) string {
 
 	rendered := lipgloss.NewStyle().Foreground(color).Render(art)
 
-	// Append zzz visually when sleeping without altering the art string itself.
 	if p.sleeping {
 		zzz := lipgloss.NewStyle().Foreground(lipgloss.Color("147")).Italic(true).Render(" zZz")
 		lines := strings.Split(rendered, "\n")
@@ -195,15 +259,15 @@ func renderStatusIndicator(p petModel) string {
 	}
 	switch {
 	case p.sleeping:
-		return col("147", "💤 Uyuyor")
+		return col("147", "💤 Sleeping")
 	case p.hunger >= 75:
-		return col("196", "🍖 Aç!")
+		return col("196", "🍖 Hungry!")
 	case p.happiness <= 20:
-		return col("196", "😢 Mutsuz!")
+		return col("196", "😢 Sad!")
 	case p.energy <= 20:
-		return col("208", "😪 Yorgun!")
+		return col("208", "😪 Tired!")
 	default:
-		return col("82", "😊 Mutlu")
+		return col("82", "😊 Happy")
 	}
 }
 

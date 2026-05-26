@@ -23,11 +23,19 @@ type mgPhase int
 
 const (
 	mgNone mgPhase = iota
+	// Guess game
 	mgGuessPlaying
 	mgGuessDone
-	mgReactionWait  // waiting for the signal to fire
-	mgReactionReady // signal is visible, waiting for keypress
+	// Reaction game
+	mgReactionWait
+	mgReactionReady
 	mgReactionDone
+	// Rock Paper Scissors
+	mgRPSPlaying
+	mgRPSDone
+	// Math Quiz
+	mgMathPlaying
+	mgMathDone
 )
 
 // ── Sub-models ────────────────────────────────────────────────────────────────
@@ -44,14 +52,26 @@ type petModel struct {
 }
 
 type minigameModel struct {
-	phase       mgPhase
-	target      int    // guess game: secret number
-	hint        string // guess game: feedback line
+	phase     mgPhase
+	resultMsg string
+
+	// Guess game
+	target      int
+	hint        string
 	attempts    int
 	maxAttempts int
-	signalAt    time.Time // reaction game: when signal fired
-	reactionMs  int64
-	resultMsg   string
+
+	// Reaction game
+	signalAt   time.Time
+	reactionMs int64
+
+	// Rock Paper Scissors (0=Rock 1=Paper 2=Scissors)
+	rpsPetChoice int
+
+	// Math Quiz
+	mathExpr       string
+	mathOptions    [3]int
+	mathCorrectOpt int // index of correct answer in mathOptions
 }
 
 // ── Root model ────────────────────────────────────────────────────────────────
@@ -60,7 +80,7 @@ type model struct {
 	screen       screenID
 	pet          petModel
 	mg           minigameModel
-	selectedChar int // cursor on char-select screen
+	selectedChar int
 	tick         int
 	width        int
 	height       int
@@ -82,7 +102,7 @@ func newPet(charIdx int) petModel {
 		hunger:    20,
 		happiness: 80,
 		energy:    90,
-		statusMsg: ch.Name + " dünyaya geldi! " + ch.Emoji,
+		statusMsg: ch.Name + " was born! Welcome! " + ch.Emoji,
 	}
 }
 
