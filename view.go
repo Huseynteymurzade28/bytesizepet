@@ -11,15 +11,12 @@ import (
 
 func (m model) View() string {
 	if m.quitting {
-		var msg string
+		msg := "Come back soon~ 🐾"
 		if m.pet.name != "" {
-			msg = "Goodbye! " + m.pet.name + " will miss you~ 🐾"
-		} else {
-			msg = "Goodbye! Come back soon~ 🐾"
+			msg = m.pet.name + " will miss you~ 🐾"
 		}
-		farewell := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("213")).
-			Render("\n  " + msg + "\n\n")
+		farewell := lipgloss.NewStyle().Foreground(colorRose).
+			Render("\n  Goodbye! " + msg + "\n\n")
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, farewell)
 	}
 
@@ -47,7 +44,7 @@ func viewCharSelect(m model) string {
 		art := lipgloss.NewStyle().Foreground(ch.Colors.Normal).Render(ch.Art.Normal)
 		nameStr := ch.Name
 		if i == m.selectedChar {
-			nameStr = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("213")).Render(nameStr)
+			nameStr = lipgloss.NewStyle().Bold(true).Foreground(colorRose).Render("✦ " + nameStr + " ✦")
 		}
 		label := nameStr + "\n" + ch.Emoji + " " + ch.Species
 		inner := art + "\n\n" + label
@@ -59,7 +56,6 @@ func viewCharSelect(m model) string {
 		}
 	}
 
-	// Layout in rows of charSelectCols
 	var rows []string
 	for i := 0; i < len(boxes); i += charSelectCols {
 		end := i + charSelectCols
@@ -79,7 +75,8 @@ func viewMain(m model) string {
 	p := m.pet
 
 	title := titleStyle.Render(fmt.Sprintf("✨  %s  %s  ✨", p.name, AllChars[p.charIdx].Emoji))
-	art := renderPetArt(p)
+
+	centeredPet := petAreaStyle.Render(renderAnimatedPet(m))
 
 	indicator := renderStatusIndicator(p)
 	infoRow := fmt.Sprintf("Status: %s    Age: %d ticks", indicator, p.age)
@@ -90,20 +87,27 @@ func viewMain(m model) string {
 		renderStat("Energy   :", p.energy, energyColor(p.energy)),
 	}, "\n")
 
-	status := statusStyle.Render("» " + p.statusMsg)
+	statusBox := statusBoxStyle.Render(statusIcon(p) + " " + p.statusMsg)
+
 	divider := dividerStyle.Render(strings.Repeat("─", 40))
-	help1 := helpStyle.Render("[f] Feed  [p] Play  [s] Sleep  [q] Quit")
-	help2 := helpStyle.Render("[1] Guess  [2] React  [3] RPS  [4] Math")
+	controls1 := renderControls(
+		[]string{"f", "p", "s", "q"},
+		[]string{"Feed", "Play", "Sleep", "Quit"},
+	)
+	controls2 := renderControls(
+		[]string{"1", "2", "3", "4"},
+		[]string{"Guess", "React", "RPS", "Math"},
+	)
 
 	content := strings.Join([]string{
 		title, "",
-		art, "",
+		centeredPet, "",
 		infoRow, "",
 		stats, "",
-		status,
+		statusBox,
 		divider,
-		help1,
-		help2,
+		controls1,
+		controls2,
 	}, "\n")
 
 	return borderStyle.Render(content)
@@ -113,7 +117,7 @@ func viewMain(m model) string {
 
 func viewMinigame(m model) string {
 	title := titleStyle.Render(fmt.Sprintf("✨  %s  %s  ✨", m.pet.name, AllChars[m.pet.charIdx].Emoji))
-	art := renderPetArt(m.pet)
+	centeredPet := petAreaStyle.Render(renderAnimatedPet(m))
 
 	var gameSection string
 	switch {
@@ -131,7 +135,7 @@ func viewMinigame(m model) string {
 
 	content := strings.Join([]string{
 		title, "",
-		art, "",
+		centeredPet, "",
 		gameSection, "",
 		help,
 	}, "\n")
@@ -141,7 +145,6 @@ func viewMinigame(m model) string {
 
 func viewGuessGame(m model) string {
 	header := mgTitleStyle.Render("🎮  NUMBER GUESS")
-
 	if m.mg.phase == mgGuessDone {
 		return strings.Join([]string{
 			header, "",
@@ -149,16 +152,13 @@ func viewGuessGame(m model) string {
 			helpStyle.Render("[ENTER] Continue"),
 		}, "\n")
 	}
-
 	hint := statusStyle.Render(m.mg.hint)
 	keys := helpStyle.Render("[1-9] Make a guess")
-
 	return strings.Join([]string{header, "", hint, keys}, "\n")
 }
 
 func viewReactionGame(m model) string {
 	header := mgTitleStyle.Render("⚡  REACTION TIME")
-
 	var body string
 	switch m.mg.phase {
 	case mgReactionWait:
@@ -171,13 +171,11 @@ func viewReactionGame(m model) string {
 		body = resultStyle.Render(m.mg.resultMsg) +
 			"\n\n" + helpStyle.Render("[ENTER] Continue")
 	}
-
 	return strings.Join([]string{header, "", body}, "\n")
 }
 
 func viewRPSGame(m model) string {
 	header := mgRPSTitleStyle.Render("🪨  ROCK  PAPER  SCISSORS  ✂️")
-
 	if m.mg.phase == mgRPSDone {
 		lines := strings.SplitN(m.mg.resultMsg, "\n\n", 2)
 		var body string
@@ -188,16 +186,13 @@ func viewRPSGame(m model) string {
 		}
 		return strings.Join([]string{header, "", body, "", helpStyle.Render("[ENTER] Continue")}, "\n")
 	}
-
 	prompt := statusStyle.Render("Choose your move!")
 	choices := helpStyle.Render("[R] Rock 🪨   [P] Paper 📄   [S] Scissors ✂️")
-
 	return strings.Join([]string{header, "", prompt, choices}, "\n")
 }
 
 func viewMathGame(m model) string {
 	header := mgMathTitleStyle.Render("🧮  MATH QUIZ")
-
 	if m.mg.phase == mgMathDone {
 		return strings.Join([]string{
 			header, "",
@@ -205,69 +200,162 @@ func viewMathGame(m model) string {
 			helpStyle.Render("[ENTER] Continue"),
 		}, "\n")
 	}
-
 	question := mathQuestionStyle.Render("  " + m.mg.mathExpr + "  ")
 	opts := helpStyle.Render(fmt.Sprintf("[1] %-5d  [2] %-5d  [3] %d",
-		m.mg.mathOptions[0],
-		m.mg.mathOptions[1],
-		m.mg.mathOptions[2],
-	))
-
+		m.mg.mathOptions[0], m.mg.mathOptions[1], m.mg.mathOptions[2]))
 	return strings.Join([]string{header, "", question, "", opts}, "\n")
 }
 
-// ── Pet art ───────────────────────────────────────────────────────────────────
+// ── Animated pet renderer ─────────────────────────────────────────────────────
 
-func renderPetArt(p petModel) string {
+func renderAnimatedPet(m model) string {
+	p := m.pet
 	ch := AllChars[p.charIdx]
 
 	var art string
 	var color lipgloss.Color
 
+	isDead := p.hunger >= 90 || (p.happiness <= 5 && p.energy <= 0)
+
 	switch {
-	case p.hunger >= 90 || (p.happiness <= 5 && p.energy <= 0):
-		art, color = ch.Art.Dead, "240"
+	case isDead:
+		art, color = ch.Art.Dead, "#707090"
 	case p.sleeping:
 		art, color = ch.Art.Sleep, ch.Colors.Sleep
 	case p.energy <= 20:
 		art, color = ch.Art.Tired, ch.Colors.Tired
 	case p.hunger >= 75:
-		art, color = ch.Art.Hungry, ch.Colors.Hungry
+		if m.animFrame == 1 {
+			art = shakeArt(ch.Art.Hungry)
+		} else {
+			art = ch.Art.Hungry
+		}
+		color = ch.Colors.Hungry
 	case p.happiness >= 80:
 		art, color = ch.Art.Happy, ch.Colors.Happy
 	default:
-		art, color = ch.Art.Normal, ch.Colors.Normal
+		if m.animFrame == 0 {
+			art = ch.Art.Normal
+		} else {
+			art = ch.Art.NormalB
+		}
+		color = ch.Colors.Normal
 	}
 
 	rendered := lipgloss.NewStyle().Foreground(color).Render(art)
 
+	// Animated sleep z's float above the head
 	if p.sleeping {
-		zzz := lipgloss.NewStyle().Foreground(lipgloss.Color("147")).Italic(true).Render(" zZz")
+		zFrames := [4]string{"   ", "z  ", "zZ ", "zZz"}
+		zStr := lipgloss.NewStyle().Foreground(lipgloss.Color("#b4a8e8")).Italic(true).
+			Render(" " + zFrames[m.sleepFrame])
 		lines := strings.Split(rendered, "\n")
-		lines[0] += zzz
-		return strings.Join(lines, "\n")
+		lines[0] += zStr
+		rendered = strings.Join(lines, "\n")
 	}
 
+	// Critical-hunger sweat drop on alternate frames
+	if p.hunger >= 85 && !p.sleeping && !isDead && m.animFrame == 1 {
+		drop := lipgloss.NewStyle().Foreground(lipgloss.Color("#78c8e8")).Render("~")
+		lines := strings.Split(rendered, "\n")
+		lines[0] = drop + lines[0]
+		rendered = strings.Join(lines, "\n")
+	}
+
+	// Habitat — cycles between frame A and B
+	hab := ch.HabitatA
+	if m.envFrame == 1 {
+		hab = ch.HabitatB
+	}
+	rendered += "\n" + habitatStyle.Render(hab)
+
+	// Action animation line (always present to prevent layout shift)
+	rendered += "\n" + renderActionAnim(m.actionAnim, m.actionFrame)
+
 	return rendered
+}
+
+// shakeArt offsets alternating lines by one space to simulate trembling.
+func shakeArt(art string) string {
+	lines := strings.Split(art, "\n")
+	for i := range lines {
+		if i%2 == 0 {
+			lines[i] = " " + lines[i]
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// renderActionAnim returns a one-line animation for feed/play actions.
+// Returns spaces when inactive so the layout height stays constant.
+func renderActionAnim(anim, frame int) string {
+	if frame >= 4 {
+		frame = 3
+	}
+	feedFrames := [4]string{
+		">°>            ",
+		"  >°>          ",
+		"    >°>        ",
+		"      nom! ♪   ",
+	}
+	playFrames := [4]string{
+		"  ♡             ",
+		" ♡  ♡           ",
+		"♡  ♡  ♡         ",
+		"  ·  ·  ·       ",
+	}
+	switch anim {
+	case 1:
+		return lipgloss.NewStyle().Foreground(colorSalmon).Render(feedFrames[frame])
+	case 2:
+		return lipgloss.NewStyle().Foreground(colorRose).Render(playFrames[frame])
+	}
+	return "                "
+}
+
+// ── Control buttons ───────────────────────────────────────────────────────────
+
+func renderControls(keys, labels []string) string {
+	dot := helpStyle.Render(" · ")
+	parts := make([]string, len(keys))
+	for i, k := range keys {
+		parts[i] = keyStyle.Render("["+k+"]") + helpStyle.Render(" "+labels[i])
+	}
+	return strings.Join(parts, dot)
 }
 
 // ── Status indicator ──────────────────────────────────────────────────────────
 
 func renderStatusIndicator(p petModel) string {
-	col := func(c, t string) string {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(c)).Render(t)
+	col := func(c lipgloss.Color, t string) string {
+		return lipgloss.NewStyle().Foreground(c).Render(t)
 	}
 	switch {
 	case p.sleeping:
-		return col("147", "💤 Sleeping")
+		return col(colorStarDust, "💤 Sleeping")
 	case p.hunger >= 75:
-		return col("196", "🍖 Hungry!")
+		return col(colorCoral, "🍖 Hungry!")
 	case p.happiness <= 20:
-		return col("196", "😢 Sad!")
+		return col(colorCoral, "😢 Sad!")
 	case p.energy <= 20:
-		return col("208", "😪 Tired!")
+		return col(colorAmber, "😪 Tired!")
 	default:
-		return col("82", "😊 Happy")
+		return col(colorSage, "😊 Happy")
+	}
+}
+
+func statusIcon(p petModel) string {
+	switch {
+	case p.sleeping:
+		return "💤"
+	case p.hunger >= 75:
+		return "🍽"
+	case p.happiness <= 20:
+		return "😢"
+	case p.energy <= 20:
+		return "😴"
+	default:
+		return "✨"
 	}
 }
 
@@ -276,10 +364,8 @@ func renderStatusIndicator(p petModel) string {
 func renderStat(label string, value int, fillColor lipgloss.Color) string {
 	const barLen = 18
 	filled := value * barLen / 100
-
 	bar := lipgloss.NewStyle().Foreground(fillColor).Render(strings.Repeat("█", filled)) +
 		barEmptyStyle.Render(strings.Repeat("░", barLen-filled))
-
 	return fmt.Sprintf("%s %s %3d%%", labelStyle.Render(label), bar, value)
 }
 
@@ -288,32 +374,32 @@ func renderStat(label string, value int, fillColor lipgloss.Color) string {
 func hungerColor(v int) lipgloss.Color {
 	switch {
 	case v >= 70:
-		return "196"
+		return colorCoral
 	case v >= 40:
-		return "214"
+		return colorAmber
 	default:
-		return "82"
+		return colorSalmon
 	}
 }
 
 func happinessColor(v int) lipgloss.Color {
 	switch {
 	case v <= 30:
-		return "196"
+		return colorCoral
 	case v <= 60:
-		return "214"
+		return colorAmber
 	default:
-		return "82"
+		return colorSunbeam
 	}
 }
 
 func energyColor(v int) lipgloss.Color {
 	switch {
 	case v <= 20:
-		return "196"
+		return colorCoral
 	case v <= 50:
-		return "214"
+		return colorAmber
 	default:
-		return "75"
+		return colorSkyBlue
 	}
 }

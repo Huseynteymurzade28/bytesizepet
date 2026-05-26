@@ -2,79 +2,114 @@ package main
 
 import "github.com/charmbracelet/lipgloss"
 
+// Pastel cozy palette — Nord / cottagecore inspired.
+const (
+	colorLavender = lipgloss.Color("#c4b5e0")
+	colorRose     = lipgloss.Color("#f0a0c0")
+	colorSage     = lipgloss.Color("#a0c4a0")
+	colorSalmon   = lipgloss.Color("#e8907a")
+	colorSunbeam  = lipgloss.Color("#f5d070")
+	colorSkyBlue  = lipgloss.Color("#78c8e8")
+	colorMint     = lipgloss.Color("#78d8a8")
+	colorCream    = lipgloss.Color("#f0e8d8")
+	colorMuted    = lipgloss.Color("#8888aa")
+	colorDimBar   = lipgloss.Color("#3a3858")
+	colorPlum     = lipgloss.Color("#7a5c98")
+	colorAmber    = lipgloss.Color("#f0b060")
+	colorCoral    = lipgloss.Color("#e07868")
+	colorStarDust = lipgloss.Color("#b8a8d8")
+	colorHabitat  = lipgloss.Color("#7060a0")
+)
+
 var (
 	borderStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("219")).
-			Padding(1, 4)
+			BorderForeground(colorLavender).
+			Padding(1, 3)
 
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("213")).
+			Foreground(colorRose).
 			Align(lipgloss.Center).
 			Width(44)
 
-	sectionStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("147")).
-			Bold(true)
-
 	labelStyle = lipgloss.NewStyle().
 			Width(11).
-			Foreground(lipgloss.Color("183"))
+			Foreground(colorMuted)
 
 	barEmptyStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("238"))
+			Foreground(colorDimBar)
 
 	statusStyle = lipgloss.NewStyle().
 			Italic(true).
-			Foreground(lipgloss.Color("222"))
+			Foreground(colorCream)
+
+	statusBoxStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorPlum).
+			Foreground(colorCream).
+			Italic(true).
+			Padding(0, 1)
 
 	helpStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("245"))
+			Foreground(colorMuted)
+
+	keyStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(colorStarDust)
 
 	dividerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("219"))
+			Foreground(colorPlum)
 
+	habitatStyle = lipgloss.NewStyle().
+			Foreground(colorHabitat)
+
+	petAreaStyle = lipgloss.NewStyle().
+			Width(44).
+			Align(lipgloss.Center)
+
+	// Character select cards
 	charBoxStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("238")).
+			BorderForeground(colorMuted).
 			Padding(1, 1).
 			Width(14).
 			Align(lipgloss.Center)
 
 	charBoxSelectedStyle = lipgloss.NewStyle().
-				Border(lipgloss.DoubleBorder()).
-				BorderForeground(lipgloss.Color("213")).
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(colorRose).
 				Padding(1, 1).
 				Width(14).
 				Align(lipgloss.Center)
 
+	// Minigame
 	mgTitleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("226"))
+			Foreground(colorSunbeam)
 
 	mgRPSTitleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("159"))
+			Foreground(colorSkyBlue)
 
 	mgMathTitleStyle = lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("183"))
+				Foreground(colorMint)
 
 	reactionWaitStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("245")).
+				Foreground(colorMuted).
 				Italic(true)
 
 	reactionReadyStyle = lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("82"))
+				Foreground(colorSage)
 
 	resultStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("213"))
+			Foreground(colorRose)
 
 	mathQuestionStyle = lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("226")).
+				Foreground(colorSunbeam).
 				Align(lipgloss.Center)
 )

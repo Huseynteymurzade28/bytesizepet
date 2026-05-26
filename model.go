@@ -23,17 +23,13 @@ type mgPhase int
 
 const (
 	mgNone mgPhase = iota
-	// Guess game
 	mgGuessPlaying
 	mgGuessDone
-	// Reaction game
 	mgReactionWait
 	mgReactionReady
 	mgReactionDone
-	// Rock Paper Scissors
 	mgRPSPlaying
 	mgRPSDone
-	// Math Quiz
 	mgMathPlaying
 	mgMathDone
 )
@@ -43,35 +39,31 @@ const (
 type petModel struct {
 	charIdx   int
 	name      string
-	hunger    int // 0-100; higher means hungrier
+	hunger    int // 0-100; higher = hungrier
 	happiness int // 0-100
 	energy    int // 0-100
 	sleeping  bool
 	statusMsg string
-	age       int // number of ticks lived
+	age       int
 }
 
 type minigameModel struct {
 	phase     mgPhase
 	resultMsg string
 
-	// Guess game
 	target      int
 	hint        string
 	attempts    int
 	maxAttempts int
 
-	// Reaction game
 	signalAt   time.Time
 	reactionMs int64
 
-	// Rock Paper Scissors (0=Rock 1=Paper 2=Scissors)
 	rpsPetChoice int
 
-	// Math Quiz
 	mathExpr       string
 	mathOptions    [3]int
-	mathCorrectOpt int // index of correct answer in mathOptions
+	mathCorrectOpt int
 }
 
 // ── Root model ────────────────────────────────────────────────────────────────
@@ -85,11 +77,19 @@ type model struct {
 	width        int
 	height       int
 	quitting     bool
+
+	// Animation state
+	animFrame   int // 0 or 1 — idle frame toggle
+	sleepFrame  int // 0-3 — z / zZ / zZz cycle
+	actionAnim  int // 0=none  1=feed  2=play
+	actionFrame int // 0-3 — action progress
+	envFrame    int // 0 or 1 — habitat toggle
 }
 
 // ── Messages ──────────────────────────────────────────────────────────────────
 
 type tickMsg time.Time
+type animTickMsg time.Time
 type reactionSignalMsg struct{}
 
 // ── Constructors ──────────────────────────────────────────────────────────────
@@ -120,6 +120,12 @@ func initialModel() model {
 func tickCmd() tea.Cmd {
 	return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
 		return tickMsg(t)
+	})
+}
+
+func animTickCmd() tea.Cmd {
+	return tea.Tick(700*time.Millisecond, func(t time.Time) tea.Msg {
+		return animTickMsg(t)
 	})
 }
 

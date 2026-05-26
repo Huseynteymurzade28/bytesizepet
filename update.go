@@ -34,6 +34,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tickCmd()
 
+	case animTickMsg:
+		return handleAnimTick(m)
+
 	case reactionSignalMsg:
 		if m.mg.phase == mgReactionWait {
 			m.mg.phase = mgReactionReady
@@ -67,7 +70,7 @@ func updateCharSelect(m model, msg tea.KeyMsg) (model, tea.Cmd) {
 	case "enter", " ":
 		m.pet = newPet(m.selectedChar)
 		m.screen = screenMain
-		return m, tickCmd()
+		return m, tea.Batch(tickCmd(), animTickCmd())
 	case "q", "ctrl+c":
 		m.quitting = true
 		return m, tea.Quit
@@ -92,6 +95,8 @@ func updateMain(m model, msg tea.KeyMsg) (model, tea.Cmd) {
 			p.hunger = clamp(p.hunger-30, 0, 100)
 			p.happiness = clamp(p.happiness+5, 0, 100)
 			p.statusMsg = p.name + " nom nom~ ♪"
+			m.actionAnim = 1
+			m.actionFrame = 0
 		}
 
 	case "p": // play
@@ -103,6 +108,8 @@ func updateMain(m model, msg tea.KeyMsg) (model, tea.Cmd) {
 			p.happiness = clamp(p.happiness+20, 0, 100)
 			p.energy = clamp(p.energy-15, 0, 100)
 			p.statusMsg = p.name + " played with you! ✨"
+			m.actionAnim = 2
+			m.actionFrame = 0
 		}
 
 	case "s": // sleep toggle
@@ -250,7 +257,6 @@ func updateRPS(m model, msg tea.KeyMsg) (model, tea.Cmd) {
 	}
 
 	pet := m.mg.rpsPetChoice
-	// (player - pet + 3) % 3 == 1 means player wins
 	result := (player - pet + 3) % 3
 
 	youLine := fmt.Sprintf("You:   %s %s", rpsNames[player], rpsEmoji[player])
@@ -299,7 +305,10 @@ func updateMath(m model, msg tea.KeyMsg) (model, tea.Cmd) {
 }
 
 func newMathGame() minigameModel {
-	type cfg struct{ a, b int; op string }
+	type cfg struct {
+		a, b int
+		op   string
+	}
 	var c cfg
 
 	switch rand.Intn(3) {
@@ -329,7 +338,6 @@ func newMathGame() minigameModel {
 	}
 
 	opts := [3]int{answer, answer + off1, answer + off2}
-	// Fisher-Yates shuffle
 	for i := 2; i > 0; i-- {
 		j := rand.Intn(i + 1)
 		opts[i], opts[j] = opts[j], opts[i]
@@ -383,6 +391,23 @@ func handleTick(m model) (model, tea.Cmd) {
 	}
 
 	return m, tickCmd()
+}
+
+// handleAnimTick advances all animation frame counters.
+func handleAnimTick(m model) (model, tea.Cmd) {
+	m.animFrame = 1 - m.animFrame
+	m.sleepFrame = (m.sleepFrame + 1) % 4
+	m.envFrame = 1 - m.envFrame
+
+	if m.actionAnim != 0 {
+		m.actionFrame++
+		if m.actionFrame >= 4 {
+			m.actionAnim = 0
+			m.actionFrame = 0
+		}
+	}
+
+	return m, animTickCmd()
 }
 
 func maxInt(a, b int) int {
