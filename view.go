@@ -2,20 +2,30 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Stage geometry — the little diorama the pet lives in.
+const (
+	stageW  = 40
+	stageH  = 15
+	petTopY = 3 // first row of the sprite block
+)
+
 // ── Root view ─────────────────────────────────────────────────────────────────
 
 func (m model) View() string {
+	th := m.theme()
+
 	if m.quitting {
 		msg := "Come back soon~ 🐾"
 		if m.pet.name != "" {
 			msg = m.pet.name + " will miss you~ 🐾"
 		}
-		farewell := lipgloss.NewStyle().Foreground(colorRose).
+		farewell := lipgloss.NewStyle().Foreground(th.accent).
 			Render("\n  Goodbye! " + msg + "\n\n")
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, farewell)
 	}
@@ -23,31 +33,36 @@ func (m model) View() string {
 	var content string
 	switch m.screen {
 	case screenCharSelect:
-		content = viewCharSelect(m)
+		content = viewCharSelect(m, th)
 	case screenMain:
-		content = viewMain(m)
+		content = viewMain(m, th)
 	case screenMinigame:
-		content = viewMinigame(m)
+		content = viewMinigame(m, th)
 	}
 
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, content)
 }
 
+func frame(th theme) lipgloss.Style {
+	return borderStyle.BorderForeground(th.border)
+}
+
 // ── Character select ──────────────────────────────────────────────────────────
 
-func viewCharSelect(m model) string {
-	title := titleStyle.Render("✨  Choose Your Pet  ✨")
+func viewCharSelect(m model, th theme) string {
+	title := titleStyle.Foreground(th.accent).Render("✨  Choose Your Pet  ✨")
 	sub := helpStyle.Render("  ← / → / ↑ / ↓  to select,  Enter to confirm")
 
 	boxes := make([]string, len(AllChars))
 	for i, ch := range AllChars {
-		art := lipgloss.NewStyle().Foreground(ch.Colors.Normal).Render(ch.Art.Normal)
+		art := lipgloss.NewStyle().Foreground(ch.Body).Render(
+			strings.Join(ch.spriteLines(moodHappy), "\n"))
 		nameStr := ch.Name
 		if i == m.selectedChar {
 			nameStr = lipgloss.NewStyle().Bold(true).Foreground(colorRose).Render("✦ " + nameStr + " ✦")
 		}
 		label := nameStr + "\n" + ch.Emoji + " " + ch.Species
-		inner := art + "\n\n" + label
+		inner := art + "\n" + label
 
 		if i == m.selectedChar {
 			boxes[i] = charBoxSelectedStyle.Render(inner)
@@ -66,58 +81,81 @@ func viewCharSelect(m model) string {
 	}
 
 	content := strings.Join(append([]string{title, sub, ""}, rows...), "\n")
-	return borderStyle.Render(content)
+	return frame(th).Render(content)
 }
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 
-func viewMain(m model) string {
+func viewMain(m model, th theme) string {
 	p := m.pet
 
-	title := titleStyle.Render(fmt.Sprintf("✨  %s  %s  ✨", p.name, AllChars[p.charIdx].Emoji))
+	title := titleStyle.Foreground(th.accent).
+		Render(fmt.Sprintf("✨  %s  %s  ✨", p.name, AllChars[p.charIdx].Emoji))
 
-	centeredPet := petAreaStyle.Render(renderAnimatedPet(m))
+	stage := petAreaStyle.Render(renderStage(m, th))
 
-	indicator := renderStatusIndicator(p)
-	infoRow := fmt.Sprintf("Status: %s    Age: %d ticks", indicator, p.age)
+	worldRow := renderWorldBar(m, th)
 
 	stats := strings.Join([]string{
-		renderStat("Hunger   :", p.hunger, hungerColor(p.hunger)),
-		renderStat("Happiness:", p.happiness, happinessColor(p.happiness)),
-		renderStat("Energy   :", p.energy, energyColor(p.energy)),
+		renderStat("Hunger   :", p.hunger, "#8fd694", "#e06868"),
+		renderStat("Happiness:", p.happiness, "#e07868", "#7ad6a0"),
+		renderStat("Energy   :", p.energy, "#e07868", "#78c8e8"),
 	}, "\n")
 
-	statusBox := statusBoxStyle.Render(statusIcon(p) + " " + p.statusMsg)
+	center := lipgloss.NewStyle().Width(56).Align(lipgloss.Center)
 
-	divider := dividerStyle.Render(strings.Repeat("─", 40))
-	controls1 := renderControls(
-		[]string{"f", "p", "s", "q"},
-		[]string{"Feed", "Play", "Sleep", "Quit"},
-	)
-	controls2 := renderControls(
+	statusBox := center.Render(statusBoxStyle.Render(statusIcon(p) + " " + p.statusMsg))
+
+	divider := center.Render(dividerStyle.Render(strings.Repeat("─", 44)))
+	controls1 := center.Render(renderControls(
+		[]string{"f", "p", "s", "n", "q"},
+		[]string{"Feed", "Play", "Sleep", "New", "Quit"},
+	))
+	controls2 := center.Render(renderControls(
 		[]string{"1", "2", "3", "4"},
 		[]string{"Guess", "React", "RPS", "Math"},
-	)
+	))
+	statsBlock := center.Render(stats)
 
 	content := strings.Join([]string{
-		title, "",
-		centeredPet, "",
-		infoRow, "",
-		stats, "",
+		title,
+		stage,
+		worldRow, "",
+		statsBlock, "",
 		statusBox,
 		divider,
 		controls1,
 		controls2,
 	}, "\n")
 
-	return borderStyle.Render(content)
+	return frame(th).Render(content)
+}
+
+// renderWorldBar shows the time-of-day and live weather pulled from the API.
+func renderWorldBar(m model, th theme) string {
+	left := lipgloss.NewStyle().Foreground(th.accent).Render(th.icon + " " + th.name)
+	dot := helpStyle.Render("  ·  ")
+
+	if !m.weather.ok {
+		right := helpStyle.Render("fetching weather…")
+		return petAreaStyle.Render(left + dot + right)
+	}
+	w := m.weather
+	right := lipgloss.NewStyle().Foreground(colorSkyBlue).
+		Render(fmt.Sprintf("%s %s %d°C", w.kind.icon(), w.desc, w.tempC))
+	area := ""
+	if w.area != "" {
+		area = dot + helpStyle.Render(w.area)
+	}
+	return petAreaStyle.Render(left + dot + right + area)
 }
 
 // ── Minigame screen ───────────────────────────────────────────────────────────
 
-func viewMinigame(m model) string {
-	title := titleStyle.Render(fmt.Sprintf("✨  %s  %s  ✨", m.pet.name, AllChars[m.pet.charIdx].Emoji))
-	centeredPet := petAreaStyle.Render(renderAnimatedPet(m))
+func viewMinigame(m model, th theme) string {
+	title := titleStyle.Foreground(th.accent).
+		Render(fmt.Sprintf("✨  %s  %s  ✨", m.pet.name, AllChars[m.pet.charIdx].Emoji))
+	stage := petAreaStyle.Render(renderStage(m, th))
 
 	var gameSection string
 	switch {
@@ -134,13 +172,13 @@ func viewMinigame(m model) string {
 	help := helpStyle.Render("[ESC] Back to main")
 
 	content := strings.Join([]string{
-		title, "",
-		centeredPet, "",
+		title,
+		stage, "",
 		gameSection, "",
 		help,
 	}, "\n")
 
-	return borderStyle.Render(content)
+	return frame(th).Render(content)
 }
 
 func viewGuessGame(m model) string {
@@ -206,111 +244,80 @@ func viewMathGame(m model) string {
 	return strings.Join([]string{header, "", question, "", opts}, "\n")
 }
 
-// ── Animated pet renderer ─────────────────────────────────────────────────────
+// ── The diorama ───────────────────────────────────────────────────────────────
 
-func renderAnimatedPet(m model) string {
-	p := m.pet
-	ch := AllChars[p.charIdx]
+// renderStage composites the whole scene: time-of-day sky, the ground, the pet
+// sprite, sleep z's, the feeding fish, and every weather/mood particle.
+func renderStage(m model, th theme) string {
+	c := newCanvas(stageW, stageH)
 
-	var art string
-	var color lipgloss.Color
+	// 1. Sky — scattered stars/clouds on the top rows (stable per width).
+	stars := th.starfield(stageW)
+	for x, cl := range stars {
+		if cl.r != 0 {
+			c.set(x, 0, cl.r, cl.color)
+		}
+	}
+	stars2 := th.starfield(stageW + 7) // different pattern for the 2nd row
+	for x := 0; x < stageW; x++ {
+		if cl := stars2[x]; cl.r != 0 {
+			c.set(x, 1, cl.r, cl.color)
+		}
+	}
 
-	isDead := p.hunger >= 90 || (p.happiness <= 5 && p.energy <= 0)
+	// 2. Ground — a soft scrolling floor line with little tufts.
+	groundY := stageH - 2
+	groundGlyphs := []rune{'.', ',', '˙', '·'}
+	for x := 0; x < stageW; x++ {
+		g := groundGlyphs[(x+m.envFrame)%len(groundGlyphs)]
+		c.set(x, groundY, g, th.ground)
+	}
+	for x := 0; x < stageW; x++ {
+		c.set(x, groundY+1, '▁', th.ground)
+	}
 
-	switch {
-	case isDead:
-		art, color = ch.Art.Dead, "#707090"
-	case p.sleeping:
-		art, color = ch.Art.Sleep, ch.Colors.Sleep
-	case p.energy <= 20:
-		art, color = ch.Art.Tired, ch.Colors.Tired
-	case p.hunger >= 75:
-		if m.animFrame == 1 {
-			art = shakeArt(ch.Art.Hungry)
+	// 3. The pet, centred and mood-tinted.
+	mood := m.mood()
+	ch := AllChars[m.pet.charIdx]
+	sprite := ch.spriteLines(mood)
+	tint := ch.moodColor(mood)
+	// gentle idle bob: rise one row on alternate idle frames when content
+	bob := 0
+	if mood == moodHappy && m.animFrame == 1 {
+		bob = -1
+	}
+	c.drawLinesCentered(petTopY+bob, sprite, tint)
+	cx := stageW / 2
+
+	// 4. Sleep z's drifting up from the head.
+	if m.pet.sleeping {
+		zs := []rune{'z', 'Z', 'z'}
+		for i := 0; i <= m.sleepFrame && i < len(zs); i++ {
+			c.set(cx+4+i, petTopY-i, zs[i%len(zs)], "#b8a8e8")
+		}
+	}
+
+	// 5. Feeding fish swims in toward the mouth.
+	if m.actionAnim == 1 {
+		fishX := 4 + m.actionFrame*2
+		fy := petTopY + 4
+		if m.actionFrame >= 6 {
+			c.drawString(cx-2, fy, "nom♪", colorSalmon)
 		} else {
-			art = ch.Art.Hungry
-		}
-		color = ch.Colors.Hungry
-	case p.happiness >= 80:
-		art, color = ch.Art.Happy, ch.Colors.Happy
-	default:
-		if m.animFrame == 0 {
-			art = ch.Art.Normal
-		} else {
-			art = ch.Art.NormalB
-		}
-		color = ch.Colors.Normal
-	}
-
-	rendered := lipgloss.NewStyle().Foreground(color).Render(art)
-
-	// Animated sleep z's float above the head
-	if p.sleeping {
-		zFrames := [4]string{"   ", "z  ", "zZ ", "zZz"}
-		zStr := lipgloss.NewStyle().Foreground(lipgloss.Color("#b4a8e8")).Italic(true).
-			Render(" " + zFrames[m.sleepFrame])
-		lines := strings.Split(rendered, "\n")
-		lines[0] += zStr
-		rendered = strings.Join(lines, "\n")
-	}
-
-	// Critical-hunger sweat drop on alternate frames
-	if p.hunger >= 85 && !p.sleeping && !isDead && m.animFrame == 1 {
-		drop := lipgloss.NewStyle().Foreground(lipgloss.Color("#78c8e8")).Render("~")
-		lines := strings.Split(rendered, "\n")
-		lines[0] = drop + lines[0]
-		rendered = strings.Join(lines, "\n")
-	}
-
-	// Habitat — cycles between frame A and B
-	hab := ch.HabitatA
-	if m.envFrame == 1 {
-		hab = ch.HabitatB
-	}
-	rendered += "\n" + habitatStyle.Render(hab)
-
-	// Action animation line (always present to prevent layout shift)
-	rendered += "\n" + renderActionAnim(m.actionAnim, m.actionFrame)
-
-	return rendered
-}
-
-// shakeArt offsets alternating lines by one space to simulate trembling.
-func shakeArt(art string) string {
-	lines := strings.Split(art, "\n")
-	for i := range lines {
-		if i%2 == 0 {
-			lines[i] = " " + lines[i]
+			c.drawString(fishX, fy, "<><", colorSalmon)
 		}
 	}
-	return strings.Join(lines, "\n")
-}
 
-// renderActionAnim returns a one-line animation for feed/play actions.
-// Returns spaces when inactive so the layout height stays constant.
-func renderActionAnim(anim, frame int) string {
-	if frame >= 4 {
-		frame = 3
+	// 6. Particles on top of everything.
+	for _, p := range m.particles {
+		dx := 0.0
+		if p.glyph == '*' { // snow drifts side to side
+			dx = math.Sin(p.wobble)
+		}
+		c.set(int(p.x+dx+0.5), int(p.y+0.5), p.glyph, p.color)
 	}
-	feedFrames := [4]string{
-		">°>            ",
-		"  >°>          ",
-		"    >°>        ",
-		"      nom! ♪   ",
-	}
-	playFrames := [4]string{
-		"  ♡             ",
-		" ♡  ♡           ",
-		"♡  ♡  ♡         ",
-		"  ·  ·  ·       ",
-	}
-	switch anim {
-	case 1:
-		return lipgloss.NewStyle().Foreground(colorSalmon).Render(feedFrames[frame])
-	case 2:
-		return lipgloss.NewStyle().Foreground(colorRose).Render(playFrames[frame])
-	}
-	return "                "
+
+	return c.render(th.bg)
 }
 
 // ── Control buttons ───────────────────────────────────────────────────────────
@@ -322,26 +329,6 @@ func renderControls(keys, labels []string) string {
 		parts[i] = keyStyle.Render("["+k+"]") + helpStyle.Render(" "+labels[i])
 	}
 	return strings.Join(parts, dot)
-}
-
-// ── Status indicator ──────────────────────────────────────────────────────────
-
-func renderStatusIndicator(p petModel) string {
-	col := func(c lipgloss.Color, t string) string {
-		return lipgloss.NewStyle().Foreground(c).Render(t)
-	}
-	switch {
-	case p.sleeping:
-		return col(colorStarDust, "💤 Sleeping")
-	case p.hunger >= 75:
-		return col(colorCoral, "🍖 Hungry!")
-	case p.happiness <= 20:
-		return col(colorCoral, "😢 Sad!")
-	case p.energy <= 20:
-		return col(colorAmber, "😪 Tired!")
-	default:
-		return col(colorSage, "😊 Happy")
-	}
 }
 
 func statusIcon(p petModel) string {
@@ -361,45 +348,8 @@ func statusIcon(p petModel) string {
 
 // ── Stat bar ──────────────────────────────────────────────────────────────────
 
-func renderStat(label string, value int, fillColor lipgloss.Color) string {
+func renderStat(label string, value int, lo, hi lipgloss.Color) string {
 	const barLen = 18
-	filled := value * barLen / 100
-	bar := lipgloss.NewStyle().Foreground(fillColor).Render(strings.Repeat("█", filled)) +
-		barEmptyStyle.Render(strings.Repeat("░", barLen-filled))
+	bar := gradientBar(value, barLen, lo, hi)
 	return fmt.Sprintf("%s %s %3d%%", labelStyle.Render(label), bar, value)
-}
-
-// ── Color helpers ─────────────────────────────────────────────────────────────
-
-func hungerColor(v int) lipgloss.Color {
-	switch {
-	case v >= 70:
-		return colorCoral
-	case v >= 40:
-		return colorAmber
-	default:
-		return colorSalmon
-	}
-}
-
-func happinessColor(v int) lipgloss.Color {
-	switch {
-	case v <= 30:
-		return colorCoral
-	case v <= 60:
-		return colorAmber
-	default:
-		return colorSunbeam
-	}
-}
-
-func energyColor(v int) lipgloss.Color {
-	switch {
-	case v <= 20:
-		return colorCoral
-	case v <= 50:
-		return colorAmber
-	default:
-		return colorSkyBlue
-	}
 }

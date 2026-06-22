@@ -31,7 +31,7 @@ var (
 			Bold(true).
 			Foreground(colorRose).
 			Align(lipgloss.Center).
-			Width(44)
+			Width(56)
 
 	labelStyle = lipgloss.NewStyle().
 			Width(11).
@@ -49,6 +49,8 @@ var (
 			BorderForeground(colorPlum).
 			Foreground(colorCream).
 			Italic(true).
+			Width(50).
+			Align(lipgloss.Center).
 			Padding(0, 1)
 
 	helpStyle = lipgloss.NewStyle().
@@ -65,7 +67,7 @@ var (
 			Foreground(colorHabitat)
 
 	petAreaStyle = lipgloss.NewStyle().
-			Width(44).
+			Width(56).
 			Align(lipgloss.Center)
 
 	// Character select cards
@@ -73,14 +75,14 @@ var (
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(colorMuted).
 			Padding(1, 1).
-			Width(14).
+			Width(16).
 			Align(lipgloss.Center)
 
 	charBoxSelectedStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(colorRose).
 				Padding(1, 1).
-				Width(14).
+				Width(16).
 				Align(lipgloss.Center)
 
 	// Minigame

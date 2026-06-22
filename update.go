@@ -8,7 +8,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func (m model) Init() tea.Cmd { return nil }
+func (m model) Init() tea.Cmd {
+	cmds := []tea.Cmd{fetchWeatherCmd(), weatherRefreshCmd()}
+	if m.loaded {
+		// Restored pet jumps straight to the main screen, so start its clocks.
+		cmds = append(cmds, tickCmd(), animTickCmd())
+	}
+	return tea.Batch(cmds...)
+}
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -43,6 +50,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mg.signalAt = time.Now()
 		}
 		return m, nil
+
+	case weatherMsg:
+		if msg.state.ok {
+			m.weather = msg.state
+		}
+		return m, nil
+
+	case weatherRefreshMsg:
+		return m, tea.Batch(fetchWeatherCmd(), weatherRefreshCmd())
 	}
 
 	return m, nil
@@ -85,8 +101,14 @@ func updateMain(m model, msg tea.KeyMsg) (model, tea.Cmd) {
 
 	switch msg.String() {
 	case "q", "ctrl+c":
+		_ = savePet(m.pet)
 		m.quitting = true
 		return m, tea.Quit
+
+	case "n": // release current pet and adopt a new one
+		_ = savePet(m.pet)
+		m.screen = screenCharSelect
+		return m, nil
 
 	case "f": // feed
 		if p.sleeping {
@@ -154,6 +176,7 @@ func updateMain(m model, msg tea.KeyMsg) (model, tea.Cmd) {
 func updateMinigame(m model, msg tea.KeyMsg) (model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
+		_ = savePet(m.pet)
 		m.quitting = true
 		return m, tea.Quit
 	case "esc":
@@ -390,21 +413,37 @@ func handleTick(m model) (model, tea.Cmd) {
 		}
 	}
 
+	// Autosave every ~30s so progress survives a crash, not just a clean quit.
+	if m.tick%10 == 0 {
+		_ = savePet(m.pet)
+	}
+
 	return m, tickCmd()
 }
 
-// handleAnimTick advances all animation frame counters.
+// handleAnimTick advances the master frame counter, derives the slower
+// animation cycles from it, and steps the particle field. Runs ~7×/sec.
 func handleAnimTick(m model) (model, tea.Cmd) {
-	m.animFrame = 1 - m.animFrame
-	m.sleepFrame = (m.sleepFrame + 1) % 4
-	m.envFrame = 1 - m.envFrame
+	m.frame++
+	m.animFrame = (m.frame / 4) % 2 // body idle toggle (~every 0.6s)
+	m.sleepFrame = (m.frame / 3) % 4
+	m.envFrame = (m.frame / 5) % 2
 
 	if m.actionAnim != 0 {
-		m.actionFrame++
-		if m.actionFrame >= 4 {
+		if m.frame%2 == 0 {
+			m.actionFrame++
+		}
+		if m.actionFrame >= 8 {
 			m.actionAnim = 0
 			m.actionFrame = 0
 		}
+	}
+
+	// Particles: advance, then spawn from weather + mood.
+	m.particles = stepParticles(m.particles, stageW, stageH)
+	if len(m.particles) < 60 {
+		m.particles = spawnWeather(m.particles, m.weather.kind, stageW)
+		m.particles = spawnMood(m.particles, m, stageW/2, petTopY)
 	}
 
 	return m, animTickCmd()
